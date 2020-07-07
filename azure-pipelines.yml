@@ -32,16 +32,6 @@ stages:
       vmImage: $(vmImageName)
     steps:
     
-    - task: SonarCloudPrepare@1
-      inputs:
-        SonarCloud: 'SonarCloudConnection'
-        organization: 'demoazure66'
-        scannerMode: 'CLI'
-        configMode: 'manual'
-        cliProjectKey: 'devopsazure66'
-        cliProjectName: 'demoazure'
-        cliSources: '.'
-    
     
     
     
@@ -55,12 +45,7 @@ stages:
         tags: |
           $(tag)
           
-    - task: SonarCloudAnalyze@1
-      displayName: 'Run Code Analysis on SonarCloud'
 
-    - task: SonarCloudPublish@1
-      inputs:
-          pollingTimeoutSec: '300'     
           
     - upload: manifests
       artifact: manifests
