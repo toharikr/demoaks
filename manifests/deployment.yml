@@ -1,0 +1,16 @@
+apiVersion : apps/v1beta1
+kind: Deployment
+metadata:
+  name: demoaks 
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: demoaks 
+    spec:
+      containers:
+        - name: demoaks 
+          image: demoazurecr.azurecr.io/demoaks
+          ports:
+          - containerPort: 8080
