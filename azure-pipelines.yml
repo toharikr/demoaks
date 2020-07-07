@@ -80,12 +80,6 @@ stages:
 - stage: QA
   displayName: 'Deploy to the QA environment'
   dependsOn: Dev
-  condition: |
-    and
-    (
-      succeeded(),
-      eq(variables['Build.SourceBranchName'], variables['releaseBranchName'])
-    )
   jobs:
   - deployment: Deploy
     displayName: 'Deploy to the QA environment'
