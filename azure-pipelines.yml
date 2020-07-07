@@ -1,0 +1,159 @@
+# Deploy to Azure Kubernetes Service
+# Build and push image to Azure Container Registry; Deploy to Azure Kubernetes Service
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+#2lihejmtifyxx5zeauycsgu6ydjsrsriwtkhkdepoqt4hqycdaoa
+
+resources:
+- repo: self
+
+
+variables:
+
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: 'c4d6dfa3-4e53-46af-93c3-d998d8b1ad18'
+  imageRepository: 'toharikrdemoazure'
+  containerRegistry: 'demoazurecr.azurecr.io'
+  dockerfilePath: '**/Dockerfile'
+  tag: '$(Build.BuildId)'
+  imagePullSecret: 'demoazurecrfe45-auth'
+  releaseBranchName: 'master'
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+  
+
+stages:
+- stage: Build
+  displayName: Build stage
+  jobs:  
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: SonarCloudPrepare@1
+      inputs:
+        SonarCloud: 'SonarCloudConnection'
+        organization: 'demoazure66'
+        scannerMode: 'CLI'
+        configMode: 'manual'
+        cliProjectKey: 'devopsazure66'
+        cliProjectName: 'demoazure'
+        cliSources: '.'
+        
+    #- task: SonarCloudPrepare@1
+    #  inputs:
+    #    SonarCloud: 'SonarCloudConnection'
+    #    organization: 'demoazure66'
+    #    scannerMode: 'Other'
+     
+    - task: Docker@2
+      displayName: Build and push an image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+        
+    - task: SonarCloudAnalyze@1
+      displayName: 'Run Code Analysis on SonarCloud'
+
+    - task: SonarCloudPublish@1
+      inputs:
+          pollingTimeoutSec: '300'
+
+#     - task: Maven@3
+#       inputs:
+#          mavenPomFile: 'pom.xml'
+#          publishJUnitResults: true
+#          testResultsFiles: '$(Pipeline.Workspace)/TEST-*.xml'
+#          javaHomeOption: 'JDKVersion'
+#          mavenVersionOption: 'Default'
+#          mavenAuthenticateFeed: false
+#          effectivePomSkip: false
+#          sonarQubeRunAnalysis: false
+    
+    - upload: manifests
+      artifact: manifests
+
+- stage: Dev
+  displayName: 'Deploy to the dev environment'
+  dependsOn: Build
+  condition: |
+    and
+    (
+      succeeded(),
+      eq(variables['Build.SourceBranchName'], variables['releaseBranchName'])
+    )
+  jobs:
+  - deployment: Deploy
+    displayName: 'Deploy to the dev environment'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'toharikrdemoazure.default'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: KubernetesManifest@0
+            displayName: Create imagePullSecret
+            inputs:
+              action: createSecret
+              secretName: $(imagePullSecret)
+              dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+              
+          - task: KubernetesManifest@0
+            displayName: Deploy to Kubernetes cluster
+            inputs:
+              action: deploy
+              manifests: |
+                $(Pipeline.Workspace)/manifests/deployment.yml
+                $(Pipeline.Workspace)/manifests/service.yml
+              imagePullSecrets: |
+                $(imagePullSecret)
+              containers: |
+                $(containerRegistry)/$(imageRepository):$(tag)
+
+
+- stage: QA
+  displayName: 'Deploy to the QA environment'
+  dependsOn: Dev
+  condition: |
+    and
+    (
+      succeeded(),
+      eq(variables['Build.SourceBranchName'], variables['releaseBranchName'])
+    )
+  jobs:
+  - deployment: Deploy
+    displayName: 'Deploy to the QA environment'
+    pool:
+      vmImage: $(vmImageName)
+    environment: 'QA.Default'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: KubernetesManifest@0
+            displayName: Create imagePullSecret
+            inputs:
+              action: createSecret
+              secretName: $(imagePullSecret)
+              dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+              
+          - task: KubernetesManifest@0
+            displayName: Deploy to Kubernetes cluster
+            inputs:
+              action: deploy
+              manifests: |
+                $(Pipeline.Workspace)/manifests/deployment.yml
+                $(Pipeline.Workspace)/manifests/service.yml
+              imagePullSecrets: |
+                $(imagePullSecret)
+              containers: |
+                $(containerRegistry)/$(imageRepository):$(tag) 
